@@ -103,7 +103,9 @@ class FakeIDEApp:
         self._button(controls, '▶ Build (F7)', self._start_build).pack(side='left', padx=(0, 6))
         self._button(controls, '⚠ Warnung (F6)', self._warning).pack(side='left', padx=(0, 6))
         self._button(controls, '✖ Fehler-Build', lambda: self._start_build(True)).pack(side='left', padx=(0, 6))
-        self._button(controls, '↻ Reset', self._reset).pack(side='left')
+        self._button(controls, '↻ Reset', self._reset).pack(side='left', padx=(0, 6))
+        self.fullscreen_button = self._button(controls, '⛶ Vollbild (F11)', self._fullscreen)
+        self.fullscreen_button.pack(side='left')
         selectors = tk.Frame(toolbar, bg=PANEL)
         selectors.pack(side='right', padx=13, pady=9)
         self._label(selectors, 'MODUS', bg=PANEL, fg=MUTED).pack(side='left', padx=(0, 6))
@@ -203,7 +205,8 @@ class FakeIDEApp:
                             yscrollcommand=lambda a, b: (scrollbar.set(a, b), self.lines.yview_moveto(a)))
         self.code.pack(fill='both', expand=True)
         scrollbar.configure(command=lambda *a: (self.code.yview(*a), self.lines.yview(*a)))
-        self.code.bind('<Key>', lambda event: 'break')  # visual-only display
+        # Suppress editing without swallowing global hotkeys such as F11.
+        self.code.bind('<Key>', self._on_code_key)
         self.code.tag_configure('keyword', foreground=PURPLE)
         self.code.tag_configure('string', foreground=GREEN)
         self.code.tag_configure('number', foreground=YELLOW)
@@ -423,15 +426,45 @@ class FakeIDEApp:
         self.root.after(75 if self.speed.get() != '0.5×' else 140, self._animate)
 
     def _bind_keys(self) -> None:
-        self.root.bind('<F5>', lambda _e: self._toggle())
-        self.root.bind('<F6>', lambda _e: self._warning())
-        self.root.bind('<F7>', lambda _e: self._start_build())
-        self.root.bind('<F11>', self._fullscreen)
-        self.root.bind('<Escape>', lambda _e: self.root.attributes('-fullscreen', False))
-        self.root.bind('<Control-r>', lambda _e: self._reset())
+        for sequence in ('<F5>', '<F6>', '<F7>', '<F11>', '<Escape>', '<Control-r>'):
+            self.root.bind(sequence, self._handle_shortcut)
+
+    def _handle_shortcut(self, event) -> str | None:
+        key = event.keysym
+        if key == 'F5':
+            self._toggle()
+        elif key == 'F6':
+            self._warning()
+        elif key == 'F7':
+            self._start_build()
+        elif key == 'F11':
+            self._fullscreen()
+        elif key == 'Escape':
+            self._exit_fullscreen()
+        elif key.lower() == 'r' and (event.state & 0x4):
+            self._reset()
+        else:
+            return None
+        return 'break'
+
+    def _on_code_key(self, event) -> str:
+        # The fake editor never accepts user text, but must keep hotkeys working.
+        self._handle_shortcut(event)
+        return 'break'
+
+    def _set_fullscreen(self, enabled: bool) -> None:
+        # Fullscreen hides the Windows title bar and taskbar, unlike 'zoomed'.
+        self.root.attributes('-fullscreen', enabled)
+        self.fullscreen_button.config(
+            text='▣ Fenster (F11)' if enabled else '⛶ Vollbild (F11)'
+        )
 
     def _fullscreen(self, _event=None) -> None:
-        self.root.attributes('-fullscreen', not bool(self.root.attributes('-fullscreen')))
+        self._set_fullscreen(not bool(self.root.attributes('-fullscreen')))
+
+    def _exit_fullscreen(self) -> None:
+        if bool(self.root.attributes('-fullscreen')):
+            self._set_fullscreen(False)
 
 
 def self_test() -> int:

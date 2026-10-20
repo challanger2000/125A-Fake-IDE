@@ -24,7 +24,8 @@ After the first successful [Windows Build workflow](../../actions/workflows/wind
 | F6 | Inject simulated warning |
 | F7 | Start simulated build + tests |
 | Error-Build button | Trigger deliberately failing build |
-| F11 | Fullscreen on/off |
+| F11 | Toggle true borderless fullscreen (including while the editor has focus) |
+| Vollbild / Fenster button | Toggle fullscreen using the toolbar |
 | Escape | Exit fullscreen |
 | Ctrl+R | Reset session |
 | Explorer tree | Show a different fake source file |
