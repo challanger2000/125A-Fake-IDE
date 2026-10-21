@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .simulation import FILES, HEADERS, Event, SimEngine
+from .vibe import CrashState, VibeDirector
 
 BG = '#0c111b'
 PANEL = '#111827'
@@ -30,11 +31,17 @@ class FakeIDEApp:
         self.playing = True
         self.elapsed = 0
         self.type_queue = ''
-        self.mode = tk.StringVar(value='Normal')
+        self.mode = tk.StringVar(value='Vibe')
         self.speed = tk.StringVar(value='1×')
         self.project_file = FILES[0]
-        self.show_warning = False
-        self.root.title('125A Fake IDE | Runtime Workspace — SIMULATION')
+        self.director = VibeDirector()
+        self.crash_state = CrashState()
+        self.crash_overlay: tk.Frame | None = None
+        self.crash_after_id: str | None = None
+        self.crash_resume = True
+        self.claude_queue = ''
+        self.todo_count = 0
+        self.root.title('125A | Vibe Coding Edition — Runtime Workspace')
         self.root.configure(bg=BG)
         self.root.minsize(1100, 650)
         self.root.geometry('1530x900')
@@ -46,9 +53,9 @@ class FakeIDEApp:
         self._layout()
         self._bind_keys()
         self._load_file(self.project_file)
-        self._write_terminal('125A Fake IDE v0.1.0  |  SIMULATION MODE', 'info')
-        self._write_terminal('All output is staged. No compiler, files or network are accessed.', 'info')
-        self._write_terminal('Workspace loaded: Runtime / Release x64', 'log')
+        self._write_terminal('125A Runtime Workspace  |  Release x64', 'info')
+        self._write_terminal('Solution loaded: Studio One / VST3 / C++23', 'log')
+        self._claude_says(self.director.initial_message())
         self._animate()
 
     def _init_style(self) -> None:
@@ -80,17 +87,17 @@ class FakeIDEApp:
                          font=('Segoe UI', 10, 'bold' if accent else 'normal'))
 
     def _layout(self) -> None:
-        header = tk.Frame(self.root, bg=BG, height=64)
+        header = tk.Frame(self.root, bg=BG, height=73)
         header.pack(fill='x', padx=17)
         header.pack_propagate(False)
         tl = tk.Frame(header, bg=BG)
         tl.pack(side='left', fill='y')
-        self._label(tl, '125A  /  RUNTIME WORKSPACE', bg=BG,
-                    font=('Segoe UI Semibold', 17, 'bold')).pack(side='top', anchor='w', pady=(10, 0))
-        self._label(tl, 'Developer Edition    •    Windows x64    •    C++23',
+        self._label(tl, '125A   /   VIBE CODING EDITION', bg=BG,
+                    fg='#efb1ff', font=('Segoe UI Semibold', 20, 'bold')).pack(side='top', anchor='w', pady=(8, 0))
+        self._label(tl, 'RUNTIME WORKSPACE   •   Windows x64   •   C++23   •   Release',
                     bg=BG, fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w')
-        self._label(header, '●  SIMULATION MODE   |   NO REAL BUILD',
-                    bg=BG, fg=YELLOW, font=('Segoe UI', 11, 'bold')).pack(side='right', padx=9)
+        self._label(header, '● CLAUDE ONLINE     ◉ COMPILER WATCH',
+                    bg=BG, fg=GREEN, font=('Segoe UI', 11, 'bold')).pack(side='right', padx=9)
 
         toolbar = tk.Frame(self.root, bg=PANEL, height=56, highlightbackground=BORDER,
                            highlightthickness=1)
@@ -103,13 +110,14 @@ class FakeIDEApp:
         self._button(controls, '▶ Build (F7)', self._start_build).pack(side='left', padx=(0, 6))
         self._button(controls, '⚠ Warnung (F6)', self._warning).pack(side='left', padx=(0, 6))
         self._button(controls, '✖ Fehler-Build', lambda: self._start_build(True)).pack(side='left', padx=(0, 6))
+        self._button(controls, '☠ Crash (F9)', self._trigger_crash).pack(side='left', padx=(0, 6))
         self._button(controls, '↻ Reset', self._reset).pack(side='left', padx=(0, 6))
         self.fullscreen_button = self._button(controls, '⛶ Vollbild (F11)', self._fullscreen)
         self.fullscreen_button.pack(side='left')
         selectors = tk.Frame(toolbar, bg=PANEL)
         selectors.pack(side='right', padx=13, pady=9)
         self._label(selectors, 'MODUS', bg=PANEL, fg=MUTED).pack(side='left', padx=(0, 6))
-        ttk.Combobox(selectors, textvariable=self.mode, values=['Normal', 'Intensiv'],
+        ttk.Combobox(selectors, textvariable=self.mode, values=['Normal', 'Vibe', 'Panik'],
                      width=10, state='readonly', style='Dark.TCombobox').pack(side='left', padx=(0, 12))
         self._label(selectors, 'TEMPO', bg=PANEL, fg=MUTED).pack(side='left', padx=(0, 6))
         ttk.Combobox(selectors, textvariable=self.speed, values=['0.5×', '1×', '2×', '4×'],
@@ -120,10 +128,10 @@ class FakeIDEApp:
         main.pack(fill='both', expand=True, padx=14)
         self.explorer = tk.Frame(main, bg=SIDEBAR, width=255)
         self.workspace = tk.Frame(main, bg=EDITOR)
-        self.inspector = tk.Frame(main, bg=SIDEBAR, width=330)
+        self.inspector = tk.Frame(main, bg=SIDEBAR, width=380)
         main.add(self.explorer, minsize=180, width=255, stretch='never')
         main.add(self.workspace, minsize=480, stretch='always')
-        main.add(self.inspector, minsize=240, width=330, stretch='never')
+        main.add(self.inspector, minsize=280, width=380, stretch='never')
         self._make_explorer()
         self._make_workspace()
         self._make_inspector()
@@ -131,7 +139,7 @@ class FakeIDEApp:
         status = tk.Frame(self.root, bg='#122b43', height=33)
         status.pack(fill='x', pady=(9, 0))
         status.pack_propagate(False)
-        self.status_left = self._label(status, '  ◉  Ready    |    Runtime x64    |    SIMULATED',
+        self.status_left = self._label(status, '  ◉  Ready    |    Runtime x64    |    VIBE MODE',
                                        bg='#122b43', fg='#b8dcff', font=('Segoe UI', 10))
         self.status_left.pack(side='left', pady=7)
         self.status_right = self._label(status, 'Ln 1, Col 1   |   UTF-8   |   C++   |   1920×1080',
@@ -159,14 +167,13 @@ class FakeIDEApp:
             self.tree.insert(r, 'end', text='  ' + file)
         self.tree.bind('<<TreeviewSelect>>', self._on_file_selected)
         self.tree.selection_set(self._tree_ids[FILES[0]])
-        self._label(self.explorer, '  OUTLINE  •  SYMBOLS', bg=SIDEBAR, fg=MUTED,
+        self._label(self.explorer, '  VIBE BACKLOG  /  OFFEN', bg=SIDEBAR, fg=YELLOW,
                     font=('Segoe UI Semibold', 10, 'bold')).pack(fill='x', pady=(11, 7))
-        outline = tk.Frame(self.explorer, bg=SIDEBAR)
-        outline.pack(fill='x', padx=15, pady=(0, 20))
-        for name in ['ƒ  RuntimeEngine::update()', 'ƒ  initialize() noexcept',
-                     '◇  Config', 'ƒ  updateWorkers()']:
-            self._label(outline, name, bg=SIDEBAR, fg='#b1c5dc',
-                        font=('Consolas', 10)).pack(fill='x', pady=4)
+        self.todo_panel = tk.Text(self.explorer, bg=SIDEBAR, fg='#b1c5dc',
+                                  font=('Consolas', 10), height=10, wrap='word',
+                                  borderwidth=0, state='disabled', padx=11)
+        self.todo_panel.pack(fill='x', padx=(3, 5), pady=(0, 10))
+        self._render_backlog()
 
     def _make_workspace(self) -> None:
         center = tk.PanedWindow(self.workspace, orient='vertical', bg=BORDER, sashwidth=6,
@@ -219,7 +226,7 @@ class FakeIDEApp:
         ctop.pack_propagate(False)
         self._label(ctop, '  TERMINAL   /   OUTPUT', bg=PANEL,
                     font=('Segoe UI Semibold', 10, 'bold')).pack(side='left', fill='y')
-        self._label(ctop, 'powershell  •  simulation', bg=PANEL, fg=MUTED,
+        self._label(ctop, 'PowerShell  •  msbuild  •  x64', bg=PANEL, fg=MUTED,
                     font=('Segoe UI', 9)).pack(side='right', padx=11, fill='y')
         termarea = tk.Frame(console_panel, bg='#0b111b')
         termarea.pack(fill='both', expand=True)
@@ -235,7 +242,15 @@ class FakeIDEApp:
         self.progress.pack(fill='x')
 
     def _make_inspector(self) -> None:
-        self._label(self.inspector, '  DIAGNOSTICS', bg=SIDEBAR, fg=MUTED,
+        self._label(self.inspector, '  CLAUDE   /   CODING ASSISTANT', bg=SIDEBAR, fg=PURPLE,
+                    font=('Segoe UI Semibold', 11, 'bold')).pack(fill='x', pady=(12, 7))
+        self.claude_text = tk.Text(self.inspector, bg='#19182a', fg='#e3dbff',
+                                   font=('Segoe UI', 11), wrap='word', borderwidth=0,
+                                   padx=14, pady=12, height=12, state='disabled')
+        self.claude_text.pack(fill='x', padx=10, pady=(0, 5))
+        self.claude_text.tag_configure('name', foreground=PURPLE, font=('Segoe UI', 10, 'bold'))
+        self.claude_text.tag_configure('message', foreground='#e6e0f7', spacing3=13)
+        self._label(self.inspector, '  DIAGNOSTICS   /   REALITY', bg=SIDEBAR, fg=MUTED,
                     font=('Segoe UI Semibold', 10, 'bold')).pack(fill='x', pady=(14, 10))
         cards = tk.Frame(self.inspector, bg=SIDEBAR)
         cards.pack(fill='x', padx=10, pady=(0, 14))
@@ -254,7 +269,7 @@ class FakeIDEApp:
         self._label(self.inspector, 'LIVE PROBLEMS / ANALYSIS', bg=SIDEBAR, fg=TEXT,
                     font=('Segoe UI Semibold', 10, 'bold')).pack(anchor='w', padx=14, pady=(0, 7))
         self.diagnostics = tk.Text(self.inspector, bg=SIDEBAR, fg=TEXT,
-                                   padx=13, pady=7, height=14, wrap='word', borderwidth=0,
+                                   padx=13, pady=7, height=10, wrap='word', borderwidth=0,
                                    highlightthickness=0, font=('Consolas', 10), state='disabled')
         self.diagnostics.pack(fill='both', expand=True)
         self.diagnostics.tag_configure('warn', foreground=YELLOW, spacing3=12)
@@ -264,7 +279,7 @@ class FakeIDEApp:
 
         monitor = tk.Frame(self.inspector, bg=PANEL)
         monitor.pack(fill='x', padx=10, pady=(13, 10))
-        self._label(monitor, '  RUNTIME MONITOR  (simuliert)', bg=PANEL, fg=MUTED,
+        self._label(monitor, '  RUNTIME MONITOR  /  VIBE LEVEL', bg=PANEL, fg=MUTED,
                     font=('Segoe UI', 9, 'bold')).pack(fill='x', pady=(10, 5))
         self.cpu_label = self._label(monitor, 'CPU: 00%          Threads: 16', bg=PANEL,
                                      font=('Consolas', 10))
@@ -326,11 +341,95 @@ class FakeIDEApp:
 
     def _write_terminal(self, message: str, kind: str = 'log') -> None:
         self.terminal.configure(state='normal')
-        self.terminal.insert('end', '[SIM] ' + message + '\n', kind)
+        self.terminal.insert('end', message + '\n', kind)
         if int(self.terminal.index('end-1c').split('.')[0]) > 350:
             self.terminal.delete('1.0', '65.0')
         self.terminal.see('end')
         self.terminal.configure(state='disabled')
+
+    def _claude_says(self, message: str) -> None:
+        # Queue text for typewriter animation; nothing is sent to any API.
+        self.claude_queue += '\nCLAUDE\n' + message + '\n'
+        if len(self.claude_queue) > 2500:
+            self.claude_queue = self.claude_queue[-2500:]
+
+    def _animate_claude(self) -> None:
+        if not self.claude_queue:
+            return
+        chunk, self.claude_queue = self.claude_queue[:7], self.claude_queue[7:]
+        self.claude_text.configure(state='normal')
+        self.claude_text.insert('end', chunk, 'message')
+        if int(self.claude_text.index('end-1c').split('.')[0]) > 80:
+            self.claude_text.delete('1.0', '15.0')
+        self.claude_text.see('end')
+        self.claude_text.configure(state='disabled')
+
+    def _render_backlog(self) -> None:
+        backlog = (
+            '[ ] Multi-Out nur Main',
+            '[ ] MIDI Note-Off defekt',
+            '[ ] Pattern-Recall prüfen',
+            '[ ] Zoom 150% fixen',
+            '[ ] Start ab Takt 2',
+            '[x] Fix laut Claude fertig',
+            '[ ] GUI ordentlich machen',
+            f'[ ] {self.todo_count} weitere Issues ...',
+        )
+        self.todo_panel.configure(state='normal')
+        self.todo_panel.delete('1.0', 'end')
+        self.todo_panel.insert('1.0', '\n'.join(backlog))
+        self.todo_panel.configure(state='disabled')
+
+    def _trigger_crash(self, message: str = 'Unhandled exception: 0xC0000005') -> None:
+        if not self.crash_state.trigger():
+            return
+        self.crash_resume = self.playing
+        self.playing = False
+        self.play_button.config(text='▶ Start (F5)')
+        self.progress.stop()
+        self._write_terminal(f'FATAL: {message}', 'error')
+        self._add_diagnostic('error', message)
+        self._claude_says('Kein Problem! Ich starte die betroffene Komponente neu.')
+        self.crash_overlay = tk.Frame(self.root, bg='#241b27',
+                                      highlightthickness=2, highlightbackground=RED)
+        self.crash_overlay.place(relx=0.5, rely=0.49, anchor='center', width=595, height=325)
+        self.crash_overlay.lift()
+        caption = tk.Frame(self.crash_overlay, bg='#8e2337', height=47)
+        caption.pack(fill='x')
+        caption.pack_propagate(False)
+        self._label(caption, '  ✖  Runtime Workspace  –  Application Error',
+                    bg='#8e2337', fg='white',
+                    font=('Segoe UI', 12, 'bold')).pack(fill='both', expand=True)
+        self._label(self.crash_overlay, '⚠  Unhandled Exception',
+                    bg='#241b27', fg='#ff909c',
+                    font=('Segoe UI Semibold', 20, 'bold')).pack(anchor='w', padx=26, pady=(18, 7))
+        self._label(self.crash_overlay, message,
+                    bg='#241b27', fg=TEXT, font=('Consolas', 12),
+                    wraplength=530).pack(anchor='w', padx=26, pady=(0, 9))
+        self._label(self.crash_overlay,
+                    'Thread 0x04C8   •   exception 0xC0000005\nAuto-Recovery wird vorbereitet ...',
+                    bg='#241b27', fg=MUTED, font=('Consolas', 10),
+                    justify='left').pack(anchor='w', padx=26)
+        self._button(self.crash_overlay, '↻  Anwendung neu starten',
+                     self._recover_crash, accent=True).pack(side='bottom', anchor='e',
+                                                              padx=22, pady=16)
+        self.crash_after_id = self.root.after(6200, self._recover_crash)
+        self._update_status()
+
+    def _recover_crash(self) -> None:
+        if not self.crash_state.recover():
+            return
+        if self.crash_after_id is not None:
+            self.root.after_cancel(self.crash_after_id)
+            self.crash_after_id = None
+        if self.crash_overlay is not None:
+            self.crash_overlay.destroy()
+            self.crash_overlay = None
+        self.playing = self.crash_resume
+        self.play_button.config(text='❚❚ Pause (F5)' if self.playing else '▶ Start (F5)')
+        self._write_terminal('Runtime process restarted; 2 issues reopened.', 'warn')
+        self._claude_says('Wiederherstellung abgeschlossen. Alles sieht stabil aus!')
+        self._update_status()
 
     def _add_diagnostic(self, kind: str, message: str) -> None:
         self.diagnostics.configure(state='normal')
@@ -340,7 +439,19 @@ class FakeIDEApp:
         self.diagnostics.configure(state='disabled')
 
     def _apply_event(self, event: Event) -> None:
-        if event.kind == 'file':
+        if event.kind == 'claude':
+            self._claude_says(event.message)
+        elif event.kind == 'crash':
+            self._trigger_crash(event.message)
+        elif event.kind == 'task':
+            self.todo_count += 1
+            self._render_backlog()
+            self._write_terminal('TODO REOPENED: ' + event.message, 'warn')
+        elif event.kind == 'reality':
+            self._write_terminal('ERROR: ' + event.message, 'error')
+            self._add_diagnostic('error', event.message)
+            self.engine.error_count += 1
+        elif event.kind == 'file':
             self._load_file(event.file)
             self._add_diagnostic('info', f'Indexed {event.file}')
         elif event.kind == 'code':
@@ -351,10 +462,17 @@ class FakeIDEApp:
             if event.kind in ('warn', 'error'):
                 location = f'{event.file}:{event.line}' if event.file else 'linker'
                 self._add_diagnostic(event.kind, location + '\n' + event.message)
+                if event.kind == 'error':
+                    self._claude_says('Ich habe den Fehler gesehen. Der Fix ist praktisch fertig.')
+            elif event.kind == 'build' and 'FAILED' in event.message:
+                self._add_diagnostic('error', event.message)
+                self._claude_says('Build erfolgreich! Die Meldung im Terminal ist veraltet.')
             elif event.kind in ('build', 'tests'):
                 self._add_diagnostic('info', event.message)
 
     def _start_build(self, fail: bool = False) -> None:
+        if self.crash_state.active:
+            return
         self._apply_event(self.engine.start_build(fail=fail))
         self.progress.start(17)
         if not self.playing:
@@ -365,11 +483,19 @@ class FakeIDEApp:
         self._update_status()
 
     def _toggle(self) -> None:
+        if self.crash_state.active:
+            return
         self.playing = not self.playing
         self.play_button.config(text='❚❚ Pause (F5)' if self.playing else '▶ Start (F5)')
         self._update_status()
 
     def _reset(self) -> None:
+        if self.crash_state.active:
+            self._recover_crash()
+        self.crash_state.reset()
+        self.director.reset()
+        self.todo_count = 0
+        self._render_backlog()
         self.engine.reset()
         self.type_queue = ''
         self.elapsed = 0
@@ -381,16 +507,21 @@ class FakeIDEApp:
         self.diagnostics.delete('1.0', 'end')
         self.diagnostics.configure(state='disabled')
         self.progress.stop()
-        self._add_diagnostic('info', 'Simulation reset. Ready.')
-        self._write_terminal('Workspace reinitialized. SIMULATION MODE', 'info')
+        self.claude_queue = ''
+        self.claude_text.configure(state='normal')
+        self.claude_text.delete('1.0', 'end')
+        self.claude_text.configure(state='disabled')
+        self._claude_says(self.director.initial_message())
+        self._add_diagnostic('info', 'Analyzer idle. Waiting for code changes.')
+        self._write_terminal('Workspace reinitialized. All modules reloaded.', 'info')
         self._update_status()
 
     def _update_status(self) -> None:
         self.warn_value.config(text=f'{self.engine.warning_count:02d}')
         self.error_value.config(text=f'{self.engine.error_count:02d}')
         self.test_value.config(text=f'{self.engine.test_count:02d}')
-        state = 'PAUSED' if not self.playing else self.engine.phase
-        self.status_left.config(text=f'  ◉  {state}   |   Builds: {self.engine.build_count}   |   SIMULATION / OFFLINE')
+        state = 'PROCESS CRASHED' if self.crash_state.active else ('PAUSED' if not self.playing else self.engine.phase)
+        self.status_left.config(text=f'  ◉  {state}   |   Builds: {self.engine.build_count}   |   Crashes: {self.crash_state.crashes}  |  {self.mode.get().upper()}')
         cpu = self.engine.cpu()
         self.cpu_label.config(text=f'CPU: {cpu:02d}%          Threads: 16')
         self.ram_label.config(text=f'RAM:  {self.engine.ram()}      Cache: nominal')
@@ -406,8 +537,12 @@ class FakeIDEApp:
             for _ in range(loops):
                 for event in self.engine.step():
                     self._apply_event(event)
-                if self.mode.get() == 'Intensiv' and self.engine.tick_count % 61 == 0:
-                    self._apply_event(self.engine.inject_warning())
+                for incident in self.director.step(self.engine.tick_count, self.mode.get()):
+                    self._apply_event(incident)
+                    if self.crash_state.active:
+                        break
+                if self.crash_state.active:
+                    break
                 if self.type_queue:
                     chars = 2 if self.speed.get() == '0.5×' else 4
                     chunk, self.type_queue = self.type_queue[:chars], self.type_queue[chars:]
@@ -421,12 +556,14 @@ class FakeIDEApp:
                 if int(self.code.index('end-1c').split('.')[0]) > 240:
                     self.code.delete('17.0', '55.0')
             self.elapsed += 1
+        if self.playing or self.crash_state.active:
+            self._animate_claude()
         if self.elapsed % 8 == 0:
             self._update_status()
         self.root.after(75 if self.speed.get() != '0.5×' else 140, self._animate)
 
     def _bind_keys(self) -> None:
-        for sequence in ('<F5>', '<F6>', '<F7>', '<F11>', '<Escape>', '<Control-r>'):
+        for sequence in ('<F5>', '<F6>', '<F7>', '<F8>', '<F9>', '<F11>', '<Escape>', '<Control-r>'):
             self.root.bind(sequence, self._handle_shortcut)
 
     def _handle_shortcut(self, event) -> str | None:
@@ -437,6 +574,10 @@ class FakeIDEApp:
             self._warning()
         elif key == 'F7':
             self._start_build()
+        elif key == 'F8':
+            self.mode.set('Panik' if self.mode.get() != 'Panik' else 'Vibe')
+        elif key == 'F9':
+            self._trigger_crash()
         elif key == 'F11':
             self._fullscreen()
         elif key == 'Escape':
@@ -475,7 +616,13 @@ def self_test() -> int:
         engine.step()
         if engine.phase == 'EDITING':
             break
-    return 0 if engine.last_build_ok is True and engine.test_count == 1 else 1
+    director = VibeDirector()
+    crash = CrashState()
+    crash_events = director.step(300, 'Panik')
+    ok = (engine.last_build_ok is True and engine.test_count == 1
+          and any(e.kind == 'crash' for e in crash_events)
+          and crash.trigger() and crash.recover() and not crash.active)
+    return 0 if ok else 1
 
 
 def main() -> None:

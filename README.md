@@ -1,59 +1,50 @@
-# 125A Fake IDE
+# 125A Vibe Coding Edition (v0.2.0)
 
-**A fully animated, realistic-looking fake programming environment for Windows.** It is a harmless desktop simulator for entertainment: it does **not** compile C++, edit real code, execute build commands, inspect actual CPU/RAM, collect data or communicate with the internet.
+An animated Windows desktop IDE parody about **Vibe Coding**: confident AI replies, a failing compiler, rising issue counts, rollback loops, and occasional staged application crashes. The visuals are deliberately serious-looking.
 
-## Download the Windows EXE
+This is a theatrical offline program, **not** a working coding environment. It does not compile source code, modify projects, contact Anthropic/Claude, read user files, use real system performance metrics, or intentionally crash the Windows process. The Claude panel is **scripted parody text**, not a real AI connection or a representation of Anthropic software. No official logos are used.
 
-After the first successful [Windows Build workflow](../../actions/workflows/windows-exe.yml), open the workflow run, download the **125A-Fake-IDE-Windows-x64** artifact under *Artifacts*, unpack it and start `125A-Fake-IDE.exe`. GitHub requires login to download workflow artifacts. The EXE is built using Python/Tkinter and packaged with PyInstaller (no Python installation needed for normal use).
+## Windows EXE
 
-## What it shows
+Run the [Windows EXE workflow](../../actions/workflows/windows-exe.yml) and download its `125A-Fake-IDE-Windows-x64` artifact for the `develop/v0.2.0` branch. Unzip and run `125A-Fake-IDE.exe`. Python installation is not needed for the packaged EXE.
 
-- Windows-style dark developer workspace, C++23 source tabs and syntax highlighting.
-- Animated code typing, auto-navigation among six synthetic files and a project tree.
-- Fake incremental MSBuild compilation, linked EXE and simulated 18-test regression suite.
-- Warning/Error diagnostics, optional deliberately failing build, and live fake CPU/RAM readouts.
-- Adjustable animation speed, normal/intensive mode, responsive split panes and fullscreen.
+## Features
 
-**SIMULATION MODE / NO REAL BUILD** remains visible on screen. The logs, warnings, code, telemetry and tests are fictional.
+- Full-screen, dark Windows developer workspace optimized for 1920×1080 monitors, with F11 and Escape.
+- Animated C++ code editing, source tree, syntax highlighting, incremental build terminal, test results, warnings, and errors.
+- **Claude assistant** pane that confidently claims success regardless of the compiler's actual output.
+- **Vibe Backlog** with familiar plugin-development bugs and a growing issue count.
+- Modes: **Normal** (quiet), **Vibe** (default, escalating errors), **Panik** (more frequent incidents and staged crashes).
+- Real-looking application error **overlay** and safe automatic recovery after about six seconds; manual recovery button.
+- Optional forced error build, warning generation, pause, restart and change of animation speed.
 
-## Controls
+## Keys
 
-| Control | Action |
-|---|---|
-| F5 | Pause/continue |
-| F6 | Inject simulated warning |
-| F7 | Start simulated build + tests |
-| Error-Build button | Trigger deliberately failing build |
-| F11 | Toggle true borderless fullscreen (including while the editor has focus) |
-| Vollbild / Fenster button | Toggle fullscreen using the toolbar |
-| Escape | Exit fullscreen |
-| Ctrl+R | Reset session |
-| Explorer tree | Show a different fake source file |
-| Speed selector | 0.5×, 1×, 2×, 4× |
-| Mode selector | Normal, Intensiv (more warnings) |
+| Key | Action |
+| --- | --- |
+| `F5` | Pause / resume |
+| `F6` | Inject warning |
+| `F7` | Start a (fictional) build |
+| `F8` | Switch Vibe / Panik mode |
+| `F9` | Trigger a staged crash and automatic recovery |
+| `F11` | Toggle borderless fullscreen |
+| `Esc` | Exit fullscreen |
+| `Ctrl+R` | Reset all stage counters and fake output |
 
-## Development
+Staged crashes never intentionally terminate the EXE, and automatic recovery resumes the scene. In Normal mode, no automatic crashes are triggered, but the F9 button remains available.
 
-Requires Python 3.11+ (built and CI-tested on Python 3.13). From repository root:
+## Development and verification
+
+Requires Python 3.11 or newer for development; Windows CI uses Python 3.13 and PyInstaller.
 
 ```powershell
 python -m unittest discover -s tests -v
 python src/main.py
+python src/main.py --self-test
 ```
 
-For a local Windows EXE:
+The GitHub Actions Windows workflow runs compile checks, Python tests, EXE packaging and a no-GUI smoke test. A live Windows 11 full-screen and interaction check remains an independent acceptance step. A preview from Linux/Xvfb does not establish Windows GUI acceptance.
 
-```powershell
-python -m pip install pyinstaller==6.16.0
-python -m PyInstaller --onefile --windowed --clean --name 125A-Fake-IDE --paths src src/main.py
-```
+## Project policy
 
-The output will be at `dist/125A-Fake-IDE.exe`.
-
-## Development status
-
-**v0.1.0 — initial development candidate.** Unit tests can be run without a GUI. The Windows workflow builds and self-tests the EXE, but a real **Windows 11, 1920×1080 visual/interaction review** is separately required before saying the visual UI is accepted. Product wireframe and scope are documented in [docs/DESIGN.md](docs/DESIGN.md).
-
-## Engineering policy
-
-The project follows the applicable repository/workflow, GUI and QA standards in [`125A-Engineering`](https://github.com/challanger2000/125A-Engineering). The official brand logo was not recreated or substituted. No audio/DSP or VST3 technology is involved.
+Uses the existing approved `develop/v0.1.0` source as its base and develops on `develop/v0.2.0`. New GUI visuals are original, no 125A brand logo artwork was recreated, and no VST3/DSP code is involved. Applicable 125A Engineering repository rules continue to apply.
